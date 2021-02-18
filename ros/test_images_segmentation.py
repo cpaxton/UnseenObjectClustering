@@ -96,7 +96,7 @@ class ImageListener:
         self.py = intrinsics[1, 2]
         print(intrinsics)
 
-        queue_size = 1
+        queue_size = 50
         slop_seconds = 0.1
         ts = message_filters.ApproximateTimeSynchronizer([rgb_sub, depth_sub], queue_size, slop_seconds)
         ts.registerCallback(self.callback_rgbd)
@@ -129,6 +129,17 @@ class ImageListener:
             self.rgb_frame_id = rgb.header.frame_id
             self.rgb_frame_stamp = rgb.header.stamp
 
+    def erode(self, labels):
+        obj_ids = np.unique(labels)[1:]
+        new_labels = np.zeros_like(labels)
+        new_labels2 = np.zeros_like(labels)
+        for oid in obj_ids:
+            mask = (labels == oid).astype(np.float32)
+            eroded_mask = cv2.erode(mask, np.ones((3, 3), np.uint8), iterations=3)
+            dilated_mask = cv2.dilate(mask, np.ones((3, 3), np.uint8), iterations=3)
+            new_labels[eroded_mask > 0] = oid
+            new_labels2[dilated_mask > 0] = oid
+        return new_labels, new_labels2
 
     def run_network(self):
 
@@ -160,18 +171,19 @@ class ImageListener:
         out_label, out_label_refined = test_sample(sample, self.network, self.network_crop)
 
         # publish segmentation mask
-        label = out_label[0].cpu().numpy()
+        label = self.erode(out_label[0].cpu().numpy())[0]
+        num_object = len(np.unique(label)) - 1
+        print('%d objects' % (num_object))
+        label *= 255 / num_object
         label_msg = self.cv_bridge.cv2_to_imgmsg(label.astype(np.uint8))
         label_msg.header.stamp = rgb_frame_stamp
         label_msg.header.frame_id = rgb_frame_id
         label_msg.encoding = 'mono8'
         self.label_pub.publish(label_msg)
 
-        num_object = len(np.unique(label)) - 1
-        print('%d objects' % (num_object))
-
         if out_label_refined is not None:
-            label_refined = out_label_refined[0].cpu().numpy()
+            label_refined = self.erode(out_label_refined[0].cpu().numpy())[0]
+            label_refined *= 255 / num_object
             label_msg_refined = self.cv_bridge.cv2_to_imgmsg(label_refined.astype(np.uint8))
             label_msg_refined.header.stamp = rgb_frame_stamp
             label_msg_refined.header.frame_id = rgb_frame_id
@@ -191,6 +203,8 @@ class ImageListener:
             rgb_msg_refined.header.stamp = rgb_frame_stamp
             rgb_msg_refined.header.frame_id = rgb_frame_id
             self.image_refined_pub.publish(rgb_msg_refined)
+        
+        print(rgb_frame_stamp)
 
 
 def parse_args():
