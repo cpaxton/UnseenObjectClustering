@@ -174,7 +174,6 @@ class ImageListener:
         label = self.erode(out_label[0].cpu().numpy())[0]
         num_object = len(np.unique(label)) - 1
         print('%d objects' % (num_object))
-        label *= 255 / num_object
         label_msg = self.cv_bridge.cv2_to_imgmsg(label.astype(np.uint8))
         label_msg.header.stamp = rgb_frame_stamp
         label_msg.header.frame_id = rgb_frame_id
@@ -183,7 +182,6 @@ class ImageListener:
 
         if out_label_refined is not None:
             label_refined = self.erode(out_label_refined[0].cpu().numpy())[0]
-            label_refined *= 255 / num_object
             label_msg_refined = self.cv_bridge.cv2_to_imgmsg(label_refined.astype(np.uint8))
             label_msg_refined.header.stamp = rgb_frame_stamp
             label_msg_refined.header.frame_id = rgb_frame_id
